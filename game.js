@@ -132,11 +132,8 @@ class Module {
     
     getCapacity() {
         if (this.type === 'energy') {
-            return [
-                { modules: 3, droids: 10 },
-                { modules: 7, droids: 22 },
-                { modules: 12, droids: 35 }
-            ][this.level - 1];
+            // Solo retorna cantidad de módulos que puede alimentar
+            return [3, 7, 12][this.level - 1];
         }
         
         const baseCapacity = {
@@ -494,36 +491,21 @@ function redistributeUnassignedDroids() {
     
     if (unassignedDroids <= 0) return; // No hay droides sin asignar
     
-    // Calcular límite total de droides por capacidad energética
-    let totalDroidCapacity = 0;
-    gameState.modules.forEach(module => {
-        if (module.type === 'energy' && module.isConnected) {
-            const capacity = module.getCapacity();
-            totalDroidCapacity += capacity.droids;
-        }
-    });
-    
-    // No asignar más droides de los que permite la capacidad energética
-    const maxAssignableDroids = Math.min(unassignedDroids, totalDroidCapacity - assignedDroids);
-    if (maxAssignableDroids <= 0) return;
-    
-    // Encontrar módulos conectados que puedan recibir droides
+    // Encontrar módulos que puedan recibir droides (sin restricción energética)
     let availableModules = gameState.modules.filter(module => 
         module.type !== 'energy' && 
-        module.isConnected && 
         module.droids < module.maxDroids
     );
     
-    // Distribuir SOLO droides no asignados, priorizando módulos con menos droides
-    let droidsToDistribute = maxAssignableDroids;
-    while (droidsToDistribute > 0 && availableModules.length > 0) {
+    // Distribuir droides no asignados, priorizando módulos con menos droides
+    while (unassignedDroids > 0 && availableModules.length > 0) {
         // Ordenar por número de droides (ascendente)
         availableModules.sort((a, b) => a.droids - b.droids);
         
         // Asignar al módulo con menos droides
         let targetModule = availableModules[0];
         targetModule.droids++;
-        droidsToDistribute--;
+        unassignedDroids--;
         
         // Si el módulo se llenó, quitarlo de la lista
         if (targetModule.droids >= targetModule.maxDroids) {
@@ -606,6 +588,13 @@ function updateConnections() {
     // Resetear conexiones
     gameState.modules.forEach(module => module.isConnected = false);
     
+    // Los módulos de energía siempre están "conectados" (se autoalimentan)
+    gameState.modules.forEach(module => {
+        if (module.type === 'energy') {
+            module.isConnected = true;
+        }
+    });
+    
     // Obtener módulos de energía ordenados por prioridad (nivel descendente, luego por orden de creación)
     const energyModules = gameState.modules
         .map((module, index) => ({ module, index }))
@@ -637,16 +626,15 @@ function updateConnections() {
         // Priorizar módulos usando el algoritmo de resolución de empates
         const prioritizedModules = prioritizeModules(reachableModules, distances);
         
-        // Obtener capacidad de este módulo de energía
-        const capacity = energyModule.getCapacity();
-        let remainingModuleCapacity = capacity.modules;
-        let remainingDroidCapacity = capacity.droids;
+        // Obtener capacidad de este módulo de energía (solo módulos)
+        const moduleCapacity = energyModule.getCapacity();
+        let remainingModuleCapacity = moduleCapacity;
         
         // Asignar energía a módulos según prioridad
         for (let module of prioritizedModules) {
             if (remainingModuleCapacity <= 0) break;
             
-            // Solo marcar módulo como conectado - no asignar droides aquí
+            // Solo marcar módulo como conectado
             module.isConnected = true;
             remainingModuleCapacity--;
         }
@@ -1059,22 +1047,19 @@ function updateUI() {
     document.getElementById('resources').textContent = Math.floor(gameState.resources);
     document.getElementById('droids').textContent = `${assignedDroids}/${gameState.totalDroids}`;
     
-    // Calcular energía disponible
+    // Calcular energía disponible y usada (solo módulos)
     let totalEnergyCapacity = 0;
     let usedModules = 0;
-    let usedDroids = 0;
     
     for (let module of gameState.modules) {
         if (module.type === 'energy' && module.isConnected) {
-            const capacity = module.getCapacity();
-            totalEnergyCapacity += capacity.droids;
+            totalEnergyCapacity += module.getCapacity();
         } else if (module.type !== 'energy' && module.isConnected) {
             usedModules++; // Solo contar módulos conectados no-energía
-            usedDroids += module.droids;
         }
     }
     
-    document.getElementById('energy').textContent = `${usedDroids}/${totalEnergyCapacity}`;
+    document.getElementById('energy').textContent = `${usedModules}/${totalEnergyCapacity}`;
     document.getElementById('wave').textContent = gameState.waveNumber;
     document.getElementById('gameSpeedDisplay').textContent = `${gameState.gameSpeed}x`;
     
