@@ -493,6 +493,19 @@ function redistributeUnassignedDroids() {
     
     if (unassignedDroids <= 0) return; // No hay droides sin asignar
     
+    // Calcular límite total de droides por capacidad energética
+    let totalDroidCapacity = 0;
+    gameState.modules.forEach(module => {
+        if (module.type === 'energy' && module.isConnected) {
+            const capacity = module.getCapacity();
+            totalDroidCapacity += capacity.droids;
+        }
+    });
+    
+    // No asignar más droides de los que permite la capacidad energética
+    const maxAssignableDroids = Math.min(unassignedDroids, totalDroidCapacity - assignedDroids);
+    if (maxAssignableDroids <= 0) return;
+    
     // Encontrar módulos conectados que puedan recibir droides
     let availableModules = gameState.modules.filter(module => 
         module.type !== 'energy' && 
@@ -501,14 +514,15 @@ function redistributeUnassignedDroids() {
     );
     
     // Distribuir SOLO droides no asignados, priorizando módulos con menos droides
-    while (unassignedDroids > 0 && availableModules.length > 0) {
+    let droidsToDistribute = maxAssignableDroids;
+    while (droidsToDistribute > 0 && availableModules.length > 0) {
         // Ordenar por número de droides (ascendente)
         availableModules.sort((a, b) => a.droids - b.droids);
         
         // Asignar al módulo con menos droides
         let targetModule = availableModules[0];
         targetModule.droids++;
-        unassignedDroids--;
+        droidsToDistribute--;
         
         // Si el módulo se llenó, quitarlo de la lista
         if (targetModule.droids >= targetModule.maxDroids) {
@@ -517,106 +531,128 @@ function redistributeUnassignedDroids() {
     }
 }
 
+// Calcular distancias de grafos desde un módulo de energía usando BFS
+function calculateGraphDistances(energyModuleIndex) {
+    const distances = new Map();
+    const queue = [];
+    const visited = new Set();
+    
+    // Inicializar BFS desde el módulo de energía
+    queue.push({ moduleIndex: energyModuleIndex, distance: 0 });
+    visited.add(energyModuleIndex);
+    distances.set(energyModuleIndex, 0);
+    
+    while (queue.length > 0) {
+        const { moduleIndex, distance } = queue.shift();
+        
+        // Explorar todas las conexiones desde este módulo
+        for (let conn of gameState.connections) {
+            let nextModuleIndex = null;
+            
+            if (conn.from === moduleIndex && !visited.has(conn.to)) {
+                nextModuleIndex = conn.to;
+            } else if (conn.to === moduleIndex && !visited.has(conn.from)) {
+                nextModuleIndex = conn.from;
+            }
+            
+            if (nextModuleIndex !== null) {
+                visited.add(nextModuleIndex);
+                distances.set(nextModuleIndex, distance + 1);
+                queue.push({ moduleIndex: nextModuleIndex, distance: distance + 1 });
+            }
+        }
+    }
+    
+    return distances;
+}
+
+// Priorizar módulos para asignación de energía (resolver empates)
+function prioritizeModules(modules, distances) {
+    return modules.slice().sort((a, b) => {
+        const aIndex = gameState.modules.indexOf(a);
+        const bIndex = gameState.modules.indexOf(b);
+        
+        // 1º: Por distancia de grafos (más cercano primero)
+        const aDistance = distances.get(aIndex) || Infinity;
+        const bDistance = distances.get(bIndex) || Infinity;
+        if (aDistance !== bDistance) {
+            return aDistance - bDistance;
+        }
+        
+        // 2º: Empate en distancia - Por tipo de módulo
+        const typePriority = { 
+            defense: 3,      // Máxima prioridad (crítico en combate)
+            production: 2,   // Media prioridad (economía)
+            recruitment: 1   // Menor prioridad (crecimiento largo plazo)
+        };
+        const aPriority = typePriority[a.type] || 0;
+        const bPriority = typePriority[b.type] || 0;
+        if (aPriority !== bPriority) {
+            return bPriority - aPriority; // Mayor prioridad primero
+        }
+        
+        // 3º: Empate en tipo - Por nivel del módulo
+        if (a.level !== b.level) {
+            return b.level - a.level; // Nivel más alto primero
+        }
+        
+        // 4º: Empate final - Por orden de creación (determinístico)
+        return a.id - b.id;
+    });
+}
+
 function updateConnections() {
     // Resetear conexiones
     gameState.modules.forEach(module => module.isConnected = false);
     
-    // Encontrar componentes conectados usando DFS
-    const visited = new Set();
-    
-    function dfs(moduleId, energyModules) {
-        if (visited.has(moduleId)) return;
-        visited.add(moduleId);
-        
-        const module = gameState.modules[moduleId];
-        if (module.type === 'energy') {
-            energyModules.push(module);
-        }
-        
-        // Buscar conexiones
-        for (let conn of gameState.connections) {
-            if (conn.from === moduleId && !visited.has(conn.to)) {
-                dfs(conn.to, energyModules);
-            } else if (conn.to === moduleId && !visited.has(conn.from)) {
-                dfs(conn.from, energyModules);
+    // Obtener módulos de energía ordenados por prioridad (nivel descendente, luego por orden de creación)
+    const energyModules = gameState.modules
+        .map((module, index) => ({ module, index }))
+        .filter(({ module }) => module.type === 'energy')
+        .sort((a, b) => {
+            // Primero por nivel (mayor nivel primero)
+            if (a.module.level !== b.module.level) {
+                return b.module.level - a.module.level;
             }
+            // Empate: por orden de creación (id menor primero)
+            return a.module.id - b.module.id;
+        });
+    
+    // Procesar cada módulo de energía individualmente
+    for (let { module: energyModule, index: energyIndex } of energyModules) {
+        // Calcular distancias de grafos desde este módulo de energía
+        const distances = calculateGraphDistances(energyIndex);
+        
+        // Obtener módulos no-energía alcanzables que aún no han sido alimentados
+        const reachableModules = gameState.modules
+            .filter((module, index) => 
+                module.type !== 'energy' && 
+                !module.isConnected && 
+                distances.has(index)
+            );
+        
+        if (reachableModules.length === 0) continue;
+        
+        // Priorizar módulos usando el algoritmo de resolución de empates
+        const prioritizedModules = prioritizeModules(reachableModules, distances);
+        
+        // Obtener capacidad de este módulo de energía
+        const capacity = energyModule.getCapacity();
+        let remainingModuleCapacity = capacity.modules;
+        let remainingDroidCapacity = capacity.droids;
+        
+        // Asignar energía a módulos según prioridad
+        for (let module of prioritizedModules) {
+            if (remainingModuleCapacity <= 0) break;
+            
+            // Solo marcar módulo como conectado - no asignar droides aquí
+            module.isConnected = true;
+            remainingModuleCapacity--;
         }
     }
     
-    // Para cada componente conectado
-    const processedModules = new Set();
-    
-    for (let i = 0; i < gameState.modules.length; i++) {
-        if (processedModules.has(i)) continue;
-        
-        const componentEnergyModules = [];
-        const componentModules = [];
-        
-        // Encontrar todos los módulos en este componente
-        const componentVisited = new Set();
-        function findComponent(moduleId) {
-            if (componentVisited.has(moduleId)) return;
-            componentVisited.add(moduleId);
-            componentModules.push(gameState.modules[moduleId]);
-            
-            for (let conn of gameState.connections) {
-                if (conn.from === moduleId && !componentVisited.has(conn.to)) {
-                    findComponent(conn.to);
-                } else if (conn.to === moduleId && !componentVisited.has(conn.from)) {
-                    findComponent(conn.from);
-                }
-            }
-        }
-        
-        findComponent(i);
-        
-        // Encontrar módulos de energía en este componente
-        componentEnergyModules.push(...componentModules.filter(m => m.type === 'energy'));
-        
-        // Calcular capacidad total de energía
-        let totalModuleCapacity = 0;
-        let totalDroidCapacity = 0;
-        
-        for (let energyModule of componentEnergyModules) {
-            const capacity = energyModule.getCapacity();
-            totalModuleCapacity += capacity.modules;
-            totalDroidCapacity += capacity.droids;
-        }
-        
-        // Contar módulos no-energía y droides
-        const nonEnergyModules = componentModules.filter(m => m.type !== 'energy');
-        const totalDroids = nonEnergyModules.reduce((sum, m) => sum + m.droids, 0);
-        
-        // Verificar si hay suficiente energía
-        if (nonEnergyModules.length <= totalModuleCapacity && totalDroids <= totalDroidCapacity) {
-            // Marcar todos los módulos como conectados
-            componentModules.forEach(module => module.isConnected = true);
-        }
-        
-        // Redistribuir droides equitativamente
-        if (componentEnergyModules.length > 0 && totalDroids <= totalDroidCapacity) {
-            let availableDroids = Math.min(gameState.totalDroids, totalDroidCapacity);
-            
-            // Resetear droides en este componente
-            nonEnergyModules.forEach(module => module.droids = 0);
-            
-            // Distribuir equitativamente
-            let moduleIndex = 0;
-            while (availableDroids > 0 && nonEnergyModules.length > 0) {
-                const module = nonEnergyModules[moduleIndex];
-                if (module.droids < module.maxDroids) {
-                    module.droids++;
-                    availableDroids--;
-                }
-                moduleIndex = (moduleIndex + 1) % nonEnergyModules.length;
-                
-                // Evitar bucle infinito
-                if (nonEnergyModules.every(m => m.droids >= m.maxDroids)) break;
-            }
-        }
-        
-        componentModules.forEach(module => processedModules.add(gameState.modules.indexOf(module)));
-    }
+    // Redistribuir droides no asignados globalmente
+    redistributeUnassignedDroids();
 }
 
 // Seleccionar tipo de módulo para construir
