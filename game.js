@@ -164,19 +164,90 @@ class Module {
         // Solo para módulos de reclutamiento
         if (this.type !== 'recruitment') return false;
         
-        // Verificar si hay espacio disponible en algún módulo conectado
+        // Encontrar el índice de este módulo
+        const thisModuleIndex = gameState.modules.indexOf(this);
+        if (thisModuleIndex === -1) return false;
+        
+        // Encontrar módulos conectados a este componente usando BFS
+        const connectedModules = this.getConnectedComponent(thisModuleIndex);
+        
+        // Verificar si hay espacio disponible en módulos del mismo componente
         let totalCurrentDroids = 0;
         let totalMaxCapacity = 0;
         
-        for (let module of gameState.modules) {
-            if (module.type !== 'energy' && module.isConnected) {
+        for (let moduleIndex of connectedModules) {
+            const module = gameState.modules[moduleIndex];
+            if (module.type !== 'energy') {
                 totalCurrentDroids += module.droids;
                 totalMaxCapacity += module.maxDroids;
             }
         }
         
-        // Solo producir si hay espacio disponible
+        // Solo producir si hay espacio disponible en el componente
         return totalCurrentDroids < totalMaxCapacity;
+    }
+    
+    getConnectedComponent(startIndex) {
+        // BFS para encontrar todos los módulos conectados al componente
+        const visited = new Set();
+        const queue = [startIndex];
+        const component = new Set();
+        
+        while (queue.length > 0) {
+            const currentIndex = queue.shift();
+            if (visited.has(currentIndex)) continue;
+            
+            visited.add(currentIndex);
+            component.add(currentIndex);
+            
+            // Buscar conexiones directas
+            for (let connection of gameState.connections) {
+                const otherIndex = connection.from === currentIndex ? connection.to : 
+                                 connection.to === currentIndex ? connection.from : null;
+                
+                if (otherIndex !== null && !visited.has(otherIndex)) {
+                    queue.push(otherIndex);
+                }
+            }
+        }
+        
+        return component;
+    }
+    
+    produceAndAssignDroids() {
+        // Solo para módulos de reclutamiento
+        if (this.type !== 'recruitment') return;
+        
+        const thisModuleIndex = gameState.modules.indexOf(this);
+        const connectedModules = this.getConnectedComponent(thisModuleIndex);
+        const droidsToAssign = this.getCapacity();
+        
+        // Encontrar módulos disponibles en el componente (que no sean de energía)
+        const availableModules = [];
+        for (let moduleIndex of connectedModules) {
+            const module = gameState.modules[moduleIndex];
+            if (module.type !== 'energy' && module.droids < module.maxDroids) {
+                availableModules.push(module);
+            }
+        }
+        
+        // Asignar droides directamente, priorizando módulos con menos droides
+        let droidsAssigned = 0;
+        while (droidsAssigned < droidsToAssign && availableModules.length > 0) {
+            // Ordenar por número de droides (ascendente)
+            availableModules.sort((a, b) => a.droids - b.droids);
+            
+            // Asignar al módulo con menos droides
+            const targetModule = availableModules[0];
+            targetModule.droids++;
+            gameState.totalDroids++; // Incrementar contador global solo cuando se asigna
+            droidsAssigned++;
+            
+            // Si el módulo se llenó, quitarlo de la lista
+            if (targetModule.droids >= targetModule.maxDroids) {
+                availableModules.shift();
+            }
+        }
     }
     
     upgrade() {
@@ -279,7 +350,7 @@ class Module {
         if (this.type === 'recruitment') {
             // Solo producir droides si hay espacio disponible en módulos conectados
             if (now - this.lastRecruitment >= 10000 && this.canProduceDroids()) {
-                gameState.totalDroids += this.getCapacity();
+                this.produceAndAssignDroids();
                 this.lastRecruitment = now;
             }
         }
@@ -477,42 +548,6 @@ function initGame() {
     updateConnections();
 }
 
-// Redistribuir droides no asignados automáticamente
-function redistributeUnassignedDroids() {
-    // Calcular droides asignados
-    let assignedDroids = 0;
-    gameState.modules.forEach(module => {
-        if (module.type !== 'energy') {
-            assignedDroids += module.droids;
-        }
-    });
-    
-    let unassignedDroids = gameState.totalDroids - assignedDroids;
-    
-    if (unassignedDroids <= 0) return; // No hay droides sin asignar
-    
-    // Encontrar módulos que puedan recibir droides (sin restricción energética)
-    let availableModules = gameState.modules.filter(module => 
-        module.type !== 'energy' && 
-        module.droids < module.maxDroids
-    );
-    
-    // Distribuir droides no asignados, priorizando módulos con menos droides
-    while (unassignedDroids > 0 && availableModules.length > 0) {
-        // Ordenar por número de droides (ascendente)
-        availableModules.sort((a, b) => a.droids - b.droids);
-        
-        // Asignar al módulo con menos droides
-        let targetModule = availableModules[0];
-        targetModule.droids++;
-        unassignedDroids--;
-        
-        // Si el módulo se llenó, quitarlo de la lista
-        if (targetModule.droids >= targetModule.maxDroids) {
-            availableModules = availableModules.filter(m => m !== targetModule);
-        }
-    }
-}
 
 // Calcular distancias de grafos desde un módulo de energía usando BFS
 function calculateGraphDistances(energyModuleIndex) {
@@ -639,9 +674,6 @@ function updateConnections() {
             remainingModuleCapacity--;
         }
     }
-    
-    // Redistribuir droides no asignados globalmente
-    redistributeUnassignedDroids();
 }
 
 // Seleccionar tipo de módulo para construir
@@ -1287,7 +1319,6 @@ let mouseY = 0;
 
 // Bucle principal del juego
 let lastTime = 0;
-let lastRedistribution = 0;
 function gameLoop(currentTime) {
     if (!gameState.gameRunning) return;
     
@@ -1304,11 +1335,6 @@ function gameLoop(currentTime) {
     
     gameState.gameTime += deltaTime;
     
-    // Redistribuir droides no asignados cada 2 segundos
-    if (currentTime - lastRedistribution >= 2000) {
-        redistributeUnassignedDroids();
-        lastRedistribution = currentTime;
-    }
     
     // Generar oleadas
     if (gameState.gameTime >= gameState.nextWaveTime && gameState.waveNumber < 10) {
