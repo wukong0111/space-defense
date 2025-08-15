@@ -111,22 +111,28 @@
             
             <div id="timer">05:00</div>
             
+            <h4>VELOCIDAD</h4>
+            <div class="stat">Velocidad: <span id="gameSpeedDisplay">1x</span></div>
+            <button class="module-button" onclick="changeGameSpeed()">
+                Cambiar Velocidad
+            </button>
+            
             <h4>CONSTRUCCIÓN</h4>
-            <button class="module-button" onclick="selectModuleType('energy')">
+            <button id="energyButton" class="module-button" onclick="selectModuleType('energy')">
                 Energía (150) - Amarillo
             </button>
-            <button class="module-button" onclick="selectModuleType('recruitment')">
+            <button id="recruitmentButton" class="module-button" onclick="selectModuleType('recruitment')">
                 Reclutamiento (200) - Verde
             </button>
-            <button class="module-button" onclick="selectModuleType('production')">
+            <button id="productionButton" class="module-button" onclick="selectModuleType('production')">
                 Producción (250) - Azul
             </button>
-            <button class="module-button" onclick="selectModuleType('defense')">
+            <button id="defenseButton" class="module-button" onclick="selectModuleType('defense')">
                 Defensa (300) - Rojo
             </button>
             
             <h4>CONEXIONES</h4>
-            <button class="module-button" onclick="selectConnectionMode()">
+            <button id="connectionButton" class="module-button" onclick="selectConnectionMode()">
                 Crear Conexión (50)
             </button>
             <button class="module-button" style="background: #dc3545;" onclick="selectDestroyMode()">

@@ -7,7 +7,7 @@ canvas.height = window.innerHeight;
 
 // Estado del juego
 let gameState = {
-    resources: 10000, // TODO: Cambiar a 0 en producción
+    resources: 100,
     totalDroids: 1,
     selectedModuleType: null,
     modules: [],
@@ -20,7 +20,8 @@ let gameState = {
     gameRunning: true,
     placingModule: false,
     connectionMode: false,
-    destroyMode: false
+    destroyMode: false,
+    gameSpeed: 1.0 // Velocidad del juego: 0.5x, 1x, 2x
 };
 
 // Tipos de módulos
@@ -139,7 +140,7 @@ class Module {
         
         const baseCapacity = {
             recruitment: 1, // droides per 10 seconds
-            production: 5, // resources per second
+            production: 2, // resources per second
             defense: 1 // attacks per round (cada 2 segundos)
         };
         
@@ -1038,6 +1039,7 @@ function updateUI() {
     
     document.getElementById('energy').textContent = `${usedDroids}/${totalEnergyCapacity}`;
     document.getElementById('wave').textContent = gameState.waveNumber;
+    document.getElementById('gameSpeedDisplay').textContent = `${gameState.gameSpeed}x`;
     
     // Timer
     const timeToWave = Math.max(0, gameState.nextWaveTime - gameState.gameTime);
@@ -1077,16 +1079,17 @@ function updateUI() {
         modulesList.appendChild(div);
     });
     
-    // Actualizar botones de construcción
-    const buttons = document.querySelectorAll('.module-button');
-    const types = ['energy', 'recruitment', 'production', 'defense'];
+    // Actualizar botones de construcción usando IDs específicos
+    const buildingButtons = [
+        { id: 'energyButton', type: 'energy', color: 'Amarillo' },
+        { id: 'recruitmentButton', type: 'recruitment', color: 'Verde' },
+        { id: 'productionButton', type: 'production', color: 'Azul' },
+        { id: 'defenseButton', type: 'defense', color: 'Rojo' }
+    ];
     
-    // Solo actualizar los primeros 4 botones (los de construcción)
-    for (let index = 0; index < Math.min(4, buttons.length); index++) {
-        const button = buttons[index];
-        const type = types[index];
-        
-        if (type && moduleTypes[type]) {
+    buildingButtons.forEach(({ id, type, color }) => {
+        const button = document.getElementById(id);
+        if (button && moduleTypes[type]) {
             const cost = moduleTypes[type].cost;
             const connectionCost = gameState.modules.length > 0 ? 50 : 0;
             const totalCost = cost + connectionCost;
@@ -1095,19 +1098,13 @@ function updateUI() {
             
             // Actualizar texto del botón para mostrar costo total
             const costText = connectionCost > 0 ? `${cost}+${connectionCost}` : cost.toString();
-            const colorText = button.textContent.includes(' - ') ? 
-                button.textContent.split(' - ')[1] : 
-                (type === 'energy' ? 'Amarillo' : 
-                 type === 'recruitment' ? 'Verde' : 
-                 type === 'production' ? 'Azul' : 'Rojo');
-            
-            button.textContent = `${moduleTypes[type].name} (${costText}) - ${colorText}`;
+            button.textContent = `${moduleTypes[type].name} (${costText}) - ${color}`;
         }
-    }
+    });
     
-    // Actualizar botón de conexión (índice 4)
-    if (buttons.length > 4) {
-        const connectionButton = buttons[4];
+    // Actualizar botón de conexión
+    const connectionButton = document.getElementById('connectionButton');
+    if (connectionButton) {
         connectionButton.disabled = gameState.resources < 50;
     }
 }
@@ -1118,6 +1115,14 @@ function upgradeModule(index) {
         module.upgrade();
         updateConnections();
     }
+}
+
+// Cambiar velocidad del juego
+function changeGameSpeed() {
+    const speeds = [1.0, 2.0, 4.0];
+    const currentIndex = speeds.indexOf(gameState.gameSpeed);
+    const nextIndex = (currentIndex + 1) % speeds.length;
+    gameState.gameSpeed = speeds[nextIndex];
 }
 
 // Remover módulos destruidos
@@ -1238,7 +1243,7 @@ let lastRedistribution = 0;
 function gameLoop(currentTime) {
     if (!gameState.gameRunning) return;
     
-    const deltaTime = currentTime - lastTime;
+    const deltaTime = (currentTime - lastTime) * gameState.gameSpeed;
     lastTime = currentTime;
     
     gameState.gameTime += deltaTime;
