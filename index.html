@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estación Espacial - Defensa Droides</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000011;
+            color: white;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #gameCanvas {
+            background: radial-gradient(circle at center, #001122 0%, #000000 100%);
+            cursor: crosshair;
+        }
+        
+        #sidebar {
+            width: 250px;
+            background: #1a1a2e;
+            padding: 20px;
+            border-left: 2px solid #16213e;
+            overflow-y: auto;
+        }
+        
+        .stat {
+            margin: 10px 0;
+            padding: 5px;
+            background: #16213e;
+            border-radius: 3px;
+        }
+        
+        .module-button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px;
+            background: #0f3460;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        
+        .module-button:hover {
+            background: #16213e;
+        }
+        
+        .module-button:disabled {
+            background: #333;
+            cursor: not-allowed;
+        }
+        
+        #timer {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff6b6b;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .module-list {
+            margin-top: 20px;
+        }
+        
+        .module-item {
+            background: #16213e;
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        .upgrade-btn {
+            background: #4ecdc4;
+            color: black;
+            border: none;
+            padding: 3px 6px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-left: 5px;
+        }
+        
+        .upgrade-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="sidebar">
+            <h3>CENTRO DE COMANDO</h3>
+            
+            <div class="stat">Recursos: <span id="resources">0</span></div>
+            <div class="stat">Droides: <span id="droids">1</span></div>
+            <div class="stat">Energía: <span id="energy">0/10</span></div>
+            <div class="stat">Oleada: <span id="wave">0</span>/10</div>
+            
+            <div id="timer">05:00</div>
+            
+            <h4>CONSTRUCCIÓN</h4>
+            <button class="module-button" onclick="selectModuleType('energy')">
+                Energía (150) - Amarillo
+            </button>
+            <button class="module-button" onclick="selectModuleType('recruitment')">
+                Reclutamiento (200) - Verde
+            </button>
+            <button class="module-button" onclick="selectModuleType('production')">
+                Producción (250) - Azul
+            </button>
+            <button class="module-button" onclick="selectModuleType('defense')">
+                Defensa (300) - Rojo
+            </button>
+            
+            <h4>CONEXIONES</h4>
+            <button class="module-button" onclick="selectConnectionMode()">
+                Crear Conexión (50)
+            </button>
+            <button class="module-button" style="background: #dc3545;" onclick="selectDestroyMode()">
+                Destruir Módulo
+            </button>
+            
+            <!-- TODO: Remover en producción -->
+            <h4 style="color: #ff6b6b;">DESARROLLO</h4>
+            <button class="module-button" style="background: #ff6b6b;" onclick="forceSpawnWave()">
+                Invocar Oleada
+            </button>
+            
+            <div class="module-list">
+                <h4>MÓDULOS ACTIVOS</h4>
+                <div id="modulesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script defer src="game.js"></script>
+</body>
+</html>
