@@ -18,6 +18,7 @@ let gameState = {
     nextWaveTime: 300000, // 5 minutos en milisegundos
     waveNumber: 0,
     gameRunning: true,
+    gamePaused: false,
     placingModule: false,
     connectionMode: false,
     destroyMode: false,
@@ -1077,6 +1078,13 @@ function updateUI() {
     document.getElementById('wave').textContent = gameState.waveNumber;
     document.getElementById('gameSpeedDisplay').textContent = `${gameState.gameSpeed}x`;
     
+    // Actualizar botón de pausa
+    const pauseButton = document.getElementById('pauseButton');
+    if (pauseButton) {
+        pauseButton.textContent = gameState.gamePaused ? 'Reanudar Juego' : 'Pausar Juego';
+        pauseButton.style.background = gameState.gamePaused ? '#28a745' : '#0f3460';
+    }
+    
     // Timer
     const timeToWave = Math.max(0, gameState.nextWaveTime - gameState.gameTime);
     const minutes = Math.floor(timeToWave / 60000);
@@ -1159,6 +1167,11 @@ function changeGameSpeed() {
     const currentIndex = speeds.indexOf(gameState.gameSpeed);
     const nextIndex = (currentIndex + 1) % speeds.length;
     gameState.gameSpeed = speeds[nextIndex];
+}
+
+// Alternar pausa del juego
+function togglePause() {
+    gameState.gamePaused = !gameState.gamePaused;
 }
 
 // Remover módulos destruidos
@@ -1267,6 +1280,20 @@ function render() {
         ctx.fill();
         ctx.globalAlpha = 1.0;
     }
+    
+    // Mostrar indicador de pausa
+    if (gameState.gamePaused) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '48px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('PAUSADO', canvas.width / 2, canvas.height / 2);
+        
+        ctx.font = '24px Courier New';
+        ctx.fillText('Presiona ESPACIO o click en "Reanudar" para continuar', canvas.width / 2, canvas.height / 2 + 60);
+    }
 }
 
 // Variables para seguimiento del mouse
@@ -1278,6 +1305,14 @@ let lastTime = 0;
 let lastRedistribution = 0;
 function gameLoop(currentTime) {
     if (!gameState.gameRunning) return;
+    
+    // Si está pausado, solo renderizar y salir
+    if (gameState.gamePaused) {
+        render();
+        updateUI();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
     
     const deltaTime = (currentTime - lastTime) * gameState.gameSpeed;
     lastTime = currentTime;
@@ -1329,7 +1364,7 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 
-// Eventos de teclado para cancelar modos
+// Eventos de teclado para cancelar modos y pausar
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         gameState.selectedModuleType = null;
@@ -1337,6 +1372,11 @@ document.addEventListener('keydown', (e) => {
         gameState.connectionMode = false;
         gameState.destroyMode = false;
         canvas.style.cursor = 'default';
+    }
+    
+    if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault(); // Evitar scroll de página
+        togglePause();
     }
 });
 
