@@ -214,6 +214,31 @@ class Module {
         return component;
     }
     
+    getRecruitmentInterval() {
+        // Solo para módulos de reclutamiento
+        if (this.type !== 'recruitment') return 0;
+        
+        // Si no hay droides, no produce
+        if (this.droids === 0) return 0;
+        
+        // Progresión de 20s (1 droide) a 5s (10 droides)
+        const intervals = [
+            0,     // 0 droides - no produce
+            20000, // 1 droide - 20 segundos
+            17000, // 2 droides - 17 segundos
+            15000, // 3 droides - 15 segundos
+            13000, // 4 droides - 13 segundos
+            11000, // 5 droides - 11 segundos
+            9000,  // 6 droides - 9 segundos
+            8000,  // 7 droides - 8 segundos
+            7000,  // 8 droides - 7 segundos
+            6000,  // 9 droides - 6 segundos
+            5000   // 10 droides - 5 segundos
+        ];
+        
+        return intervals[Math.min(this.droids, 10)];
+    }
+    
     produceAndAssignDroids() {
         // Solo para módulos de reclutamiento
         if (this.type !== 'recruitment') return;
@@ -348,9 +373,13 @@ class Module {
         }
         
         if (this.type === 'recruitment') {
-            // Solo producir droides si hay espacio disponible en módulos conectados
-            if (now - this.lastRecruitment >= 10000 && this.canProduceDroids()) {
-                this.produceAndAssignDroids();
+            // Solo producir droides si hay espacio disponible y droides asignados
+            const recruitmentInterval = this.getRecruitmentInterval();
+            if (recruitmentInterval > 0 && now - this.lastRecruitment >= recruitmentInterval) {
+                if (this.canProduceDroids()) {
+                    this.produceAndAssignDroids();
+                }
+                // Siempre resetear el timer, haya producido o no
                 this.lastRecruitment = now;
             }
         }
@@ -927,31 +956,13 @@ function placeModule(x, y) {
 
 function transferDroid(targetModule) {
     if (targetModule.type === 'energy' || targetModule.droids >= targetModule.maxDroids) return;
-    if (!targetModule.isConnected) return;
     
-    // Calcular droides asignados y no asignados
-    let assignedDroids = 0;
-    gameState.modules.forEach(module => {
-        if (module.type !== 'energy') {
-            assignedDroids += module.droids;
-        }
-    });
-    
-    let unassignedDroids = gameState.totalDroids - assignedDroids;
-    
-    // Si hay droides no asignados, usar uno de esos primero
-    if (unassignedDroids > 0) {
-        targetModule.droids++;
-        return;
-    }
-    
-    // Si no hay droides no asignados, buscar módulo más cercano con droides disponibles
+    // Buscar módulo más cercano con droides disponibles para mover
     let sourceModule = null;
     let closestDistance = Infinity;
     
     for (let module of gameState.modules) {
         if (module === targetModule || module.type === 'energy' || module.droids === 0) continue;
-        if (!module.isConnected) continue;
         
         const distance = Math.sqrt(
             Math.pow(targetModule.x - module.x, 2) + 
@@ -964,9 +975,15 @@ function transferDroid(targetModule) {
         }
     }
     
+    // Solo mover droide si encontramos un módulo fuente
     if (sourceModule) {
         sourceModule.droids--;
         targetModule.droids++;
+        
+        // Si el módulo objetivo es de reclutamiento, resetear su timer para evitar producción inmediata
+        if (targetModule.type === 'recruitment') {
+            targetModule.lastRecruitment = gameState.gameTime;
+        }
     }
 }
 
