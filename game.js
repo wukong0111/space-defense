@@ -1016,20 +1016,27 @@ canvas.addEventListener('wheel', (e) => {
 function transferDroid(targetModule) {
     if (targetModule.type === 'energy' || targetModule.droids >= targetModule.maxDroids) return;
     
-    // Buscar módulo más cercano con droides disponibles para mover
-    let sourceModule = null;
-    let closestDistance = Infinity;
+    // Encontrar el índice del módulo objetivo
+    const targetModuleIndex = gameState.modules.indexOf(targetModule);
+    if (targetModuleIndex === -1) return;
     
-    for (let module of gameState.modules) {
+    // Calcular distancias de grafo desde el módulo objetivo
+    const distances = calculateGraphDistances(targetModuleIndex);
+    
+    // Buscar módulo más cercano por grafo con droides disponibles para mover
+    let sourceModule = null;
+    let closestGraphDistance = Infinity;
+    
+    for (let i = 0; i < gameState.modules.length; i++) {
+        const module = gameState.modules[i];
         if (module === targetModule || module.type === 'energy' || module.droids === 0) continue;
         
-        const distance = Math.sqrt(
-            Math.pow(targetModule.x - module.x, 2) + 
-            Math.pow(targetModule.y - module.y, 2)
-        );
+        // Solo considerar módulos conectados al objetivo
+        const graphDistance = distances.get(i);
+        if (graphDistance === undefined) continue; // No hay conexión
         
-        if (distance < closestDistance) {
-            closestDistance = distance;
+        if (graphDistance < closestGraphDistance) {
+            closestGraphDistance = graphDistance;
             sourceModule = module;
         }
     }
