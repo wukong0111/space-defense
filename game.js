@@ -120,7 +120,7 @@ class Module {
         this.type = type;
         this.id = id;
         this.level = 1;
-        this.droids = type === 'production' ? 1 : 0; // Módulo inicial tiene 1 droide
+        this.droids = 0; // Todos los módulos empiezan sin droides
         this.maxDroids = type === 'energy' ? 0 : 10;
         this.health = 100;
         this.maxHealth = 100;
@@ -573,6 +573,10 @@ function initGame() {
     
     gameState.modules = [energyModule, productionModule];
     gameState.connections = [{ from: 0, to: 1 }];
+    
+    // Asignar el único droide inicial al módulo de producción
+    productionModule.droids = 1;
+    gameState.totalDroids = 1;
     
     updateConnections();
 }
