@@ -29,7 +29,10 @@ let gameState = {
     camera: {
         x: 0,
         y: 0,
-        speed: 300 // píxeles por segundo
+        speed: 300, // píxeles por segundo
+        zoom: 1.0,  // Factor de zoom (1.0 = 100%, 0.5 = 50%, 2.0 = 200%)
+        minZoom: 0.3,
+        maxZoom: 3.0
     }
 };
 
@@ -893,8 +896,9 @@ let lastClickedModule = null;
 if (typeof document !== 'undefined') {
 canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left + gameState.camera.x; // Ajustar por cámara
-    const y = e.clientY - rect.top + gameState.camera.y;  // Ajustar por cámara
+    // Convertir coordenadas de pantalla a coordenadas del mundo
+    const x = gameState.camera.x + (e.clientX - rect.left) / gameState.camera.zoom;
+    const y = gameState.camera.y + (e.clientY - rect.top) / gameState.camera.zoom;
     
     // Verificar si estamos colocando un módulo
     if (gameState.placingModule && gameState.selectedModuleType) {
@@ -960,8 +964,9 @@ canvas.addEventListener('mousedown', (e) => {
 
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left + gameState.camera.x; // Ajustar por cámara
-    const y = e.clientY - rect.top + gameState.camera.y;  // Ajustar por cámara
+    // Convertir coordenadas de pantalla a coordenadas del mundo
+    const x = gameState.camera.x + (e.clientX - rect.left) / gameState.camera.zoom;
+    const y = gameState.camera.y + (e.clientY - rect.top) / gameState.camera.zoom;
     
     // Actualizar posición del mouse para preview
     mouseX = x;
@@ -975,6 +980,36 @@ canvas.addEventListener('mouseup', (e) => {
 // Prevenir el menú contextual del clic derecho
 canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+});
+
+// Control de zoom con scroll del mouse
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault(); // Evitar scroll de página
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Calcular punto del mundo que está bajo el mouse antes del zoom
+    const worldXBefore = gameState.camera.x + mouseX / gameState.camera.zoom;
+    const worldYBefore = gameState.camera.y + mouseY / gameState.camera.zoom;
+    
+    // Aplicar zoom
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // Zoom out / Zoom in
+    const oldZoom = gameState.camera.zoom;
+    gameState.camera.zoom *= zoomFactor;
+    
+    // Limitar zoom
+    gameState.camera.zoom = Math.max(gameState.camera.minZoom, 
+                                   Math.min(gameState.camera.maxZoom, gameState.camera.zoom));
+    
+    // Calcular punto del mundo que estaría bajo el mouse después del zoom
+    const worldXAfter = gameState.camera.x + mouseX / gameState.camera.zoom;
+    const worldYAfter = gameState.camera.y + mouseY / gameState.camera.zoom;
+    
+    // Ajustar cámara para mantener el mismo punto del mundo bajo el mouse
+    gameState.camera.x += worldXBefore - worldXAfter;
+    gameState.camera.y += worldYBefore - worldYAfter;
 });
 
 
@@ -1136,6 +1171,12 @@ function updateUI() {
     document.getElementById('wave').textContent = gameState.waveNumber;
     document.getElementById('gameSpeedDisplay').textContent = `${gameState.gameSpeed}x`;
     
+    // Mostrar nivel de zoom (si el elemento existe)
+    const zoomDisplay = document.getElementById('zoomDisplay');
+    if (zoomDisplay) {
+        zoomDisplay.textContent = `${Math.round(gameState.camera.zoom * 100)}%`;
+    }
+    
     // Actualizar botón de pausa
     const pauseButton = document.getElementById('pauseButton');
     if (pauseButton) {
@@ -1296,8 +1337,9 @@ function render() {
     // Limpiar canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Aplicar transformación de cámara
+    // Aplicar transformación de zoom y cámara
     ctx.save();
+    ctx.scale(gameState.camera.zoom, gameState.camera.zoom);
     ctx.translate(-gameState.camera.x, -gameState.camera.y);
     
     // Dibujar estrellas
@@ -1375,7 +1417,8 @@ const keys = {
 
 // Función para actualizar la posición de la cámara
 function updateCamera(deltaTime) {
-    const speed = gameState.camera.speed * deltaTime / 1000; // Convertir a píxeles por frame
+    // Ajustar velocidad por zoom para mantener velocidad visual consistente
+    const speed = (gameState.camera.speed * deltaTime / 1000) / gameState.camera.zoom;
     
     if (keys.w) gameState.camera.y -= speed;
     if (keys.s) gameState.camera.y += speed;
