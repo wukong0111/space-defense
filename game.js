@@ -1,9 +1,11 @@
 // Configuración del juego
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = typeof document !== 'undefined' ? document.getElementById('gameCanvas') : { width: 800, height: 600, style: {} };
+const ctx = typeof document !== 'undefined' ? canvas.getContext('2d') : {};
 
-canvas.width = window.innerWidth - 250;
-canvas.height = window.innerHeight;
+if (typeof window !== 'undefined') {
+    canvas.width = window.innerWidth - 250;
+    canvas.height = window.innerHeight;
+}
 
 // Estado del juego
 let gameState = {
@@ -137,13 +139,19 @@ class Module {
         }
         
         const baseCapacity = {
-            recruitment: 1, // droides per 10 seconds
+            recruitment: 1, // SIEMPRE 1 droide por ciclo (velocidad controlada por getRecruitmentInterval)
             production: 2, // resources per second
             defense: 1 // attacks per round (cada 2 segundos)
         };
         
-        const multiplier = 1 + (this.level - 1) * 0.5; // +50% per level
-        return baseCapacity[this.type] * this.droids * multiplier;
+        if (this.type === 'recruitment') {
+            // Reclutamiento: siempre produce 1 droide por ciclo, sin multiplicadores
+            return 1;
+        } else {
+            // Otros módulos: capacidad escalada por droides y nivel
+            const multiplier = 1 + (this.level - 1) * 0.5; // +50% per level
+            return baseCapacity[this.type] * this.droids * multiplier;
+        }
     }
     
     getUpgradeCost() {
@@ -273,6 +281,7 @@ class Module {
                 availableModules.shift();
             }
         }
+        console.log('totalDroids', gameState.totalDroids)
     }
     
     upgrade() {
@@ -746,9 +755,9 @@ function destroyModule(moduleIndex) {
     
     const module = gameState.modules[moduleIndex];
     
-    // Devolver droides al pool
+    // Los droides se destruyen junto con el módulo
     if (module.type !== 'energy') {
-        gameState.totalDroids += module.droids;
+        gameState.totalDroids -= module.droids;
     }
     
     // Remover el módulo
@@ -814,10 +823,68 @@ function createConnectionFromModule(sourceModuleIndex) {
     return false; // No se encontró ningún módulo para conectar
 }
 
+// Función para colocar módulos (disponible tanto en navegador como en tests)
+function placeModule(x, y) {
+    const type = gameState.selectedModuleType;
+    const cost = moduleTypes[type].cost;
+    const connectionCost = gameState.modules.length > 0 ? 50 : 0; // Solo cobrar conexión si no es el primer módulo
+    const totalCost = cost + connectionCost;
+    
+    if (gameState.resources < totalCost) return;
+    
+    // Verificar que no se superponga
+    for (let module of gameState.modules) {
+        const distance = Math.sqrt(Math.pow(x - module.x, 2) + Math.pow(y - module.y, 2));
+        if (distance < 50) return;
+    }
+    
+    // Verificar límites del canvas (solo en navegador)
+    if (typeof document !== 'undefined' && (x < 20 || x > canvas.width - 20 || y < 20 || y > canvas.height - 20)) return;
+    
+    // Crear nuevo módulo
+    const newModule = new Module(x, y, type, gameState.modules.length);
+    gameState.modules.push(newModule);
+    gameState.resources -= cost;
+    
+    // Conectar al módulo más cercano (SIEMPRE, sin importar la distancia)
+    if (gameState.modules.length > 1) {
+        let closestModule = null;
+        let closestDistance = Infinity;
+        
+        for (let i = 0; i < gameState.modules.length - 1; i++) {
+            const module = gameState.modules[i];
+            const distance = Math.sqrt(Math.pow(x - module.x, 2) + Math.pow(y - module.y, 2));
+            
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestModule = i;
+            }
+        }
+        
+        // SIEMPRE conectar al más cercano y cobrar el costo de conexión
+        if (closestModule !== null) {
+            gameState.connections.push({
+                from: closestModule,
+                to: gameState.modules.length - 1
+            });
+            gameState.resources -= 50; // Costo de conexión
+        }
+    }
+    
+    updateConnections();
+    
+    gameState.selectedModuleType = null;
+    gameState.placingModule = false;
+    if (typeof document !== 'undefined') {
+        canvas.style.cursor = 'default';
+    }
+}
+
 // Eventos del canvas
 let lastClickTime = 0;
 let lastClickedModule = null;
 
+if (typeof document !== 'undefined') {
 canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -904,59 +971,6 @@ canvas.addEventListener('contextmenu', (e) => {
     e.preventDefault();
 });
 
-function placeModule(x, y) {
-    const type = gameState.selectedModuleType;
-    const cost = moduleTypes[type].cost;
-    const connectionCost = gameState.modules.length > 0 ? 50 : 0; // Solo cobrar conexión si no es el primer módulo
-    const totalCost = cost + connectionCost;
-    
-    if (gameState.resources < totalCost) return;
-    
-    // Verificar que no se superponga
-    for (let module of gameState.modules) {
-        const distance = Math.sqrt(Math.pow(x - module.x, 2) + Math.pow(y - module.y, 2));
-        if (distance < 50) return;
-    }
-    
-    // Verificar límites del canvas
-    if (x < 20 || x > canvas.width - 20 || y < 20 || y > canvas.height - 20) return;
-    
-    // Crear nuevo módulo
-    const newModule = new Module(x, y, type, gameState.modules.length);
-    gameState.modules.push(newModule);
-    gameState.resources -= cost;
-    
-    // Conectar al módulo más cercano (SIEMPRE, sin importar la distancia)
-    if (gameState.modules.length > 1) {
-        let closestModule = null;
-        let closestDistance = Infinity;
-        
-        for (let i = 0; i < gameState.modules.length - 1; i++) {
-            const module = gameState.modules[i];
-            const distance = Math.sqrt(Math.pow(x - module.x, 2) + Math.pow(y - module.y, 2));
-            
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestModule = i;
-            }
-        }
-        
-        // SIEMPRE conectar al más cercano y cobrar el costo de conexión
-        if (closestModule !== null) {
-            gameState.connections.push({
-                from: closestModule,
-                to: gameState.modules.length - 1
-            });
-            gameState.resources -= 50; // Costo de conexión
-        }
-    }
-    
-    updateConnections();
-    
-    gameState.selectedModuleType = null;
-    gameState.placingModule = false;
-    canvas.style.cursor = 'default';
-}
 
 function transferDroid(targetModule) {
     if (targetModule.type === 'energy' || targetModule.droids >= targetModule.maxDroids) return;
@@ -1219,8 +1233,8 @@ function removeDestroyedModules() {
     gameState.modules.forEach((module, index) => {
         if (module.health <= 0) {
             destroyedModules.push(index);
-            // Devolver droides al pool
-            gameState.totalDroids += module.droids;
+            // Los droides se destruyen junto con el módulo
+            gameState.totalDroids -= module.droids;
         }
     });
     
@@ -1418,7 +1432,25 @@ window.addEventListener('resize', () => {
     canvas.height = window.innerHeight;
 });
 
-// Inicializar y comenzar el juego
-initGame();
-updateConnections();
-requestAnimationFrame(gameLoop);
+} // Fin del if (typeof document !== 'undefined')
+
+// Solo ejecutar en navegador, no en Node.js (tests)
+if (typeof document !== 'undefined') {
+    // Inicializar y comenzar el juego
+    initGame();
+    updateConnections();
+    requestAnimationFrame(gameLoop);
+}
+
+// Exportar para tests (solo en Node.js)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        Module,
+        gameState,
+        moduleTypes,
+        initGame,
+        updateConnections,
+        transferDroid,
+        placeModule
+    };
+}
