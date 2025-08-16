@@ -24,6 +24,7 @@ let gameState = {
     placingModule: false,
     connectionMode: false,
     destroyMode: false,
+    selectedConnection: null, // Conexión seleccionada para transferencia específica
     gameSpeed: 1.0, // Velocidad del juego: 0.5x, 1x, 2x
     // Sistema de cámara
     camera: {
@@ -889,6 +890,37 @@ function placeModule(x, y) {
     }
 }
 
+// Función para detectar click en conexión
+function getClickedConnection(x, y) {
+    const tolerance = 8; // Distancia máxima para considerar un click en la línea
+    
+    for (let i = 0; i < gameState.connections.length; i++) {
+        const conn = gameState.connections[i];
+        const moduleA = gameState.modules[conn.from];
+        const moduleB = gameState.modules[conn.to];
+        
+        if (!moduleA || !moduleB) continue;
+        
+        // Calcular distancia del punto a la línea usando fórmula punto-línea
+        const A = y - moduleA.y;
+        const B = moduleA.x - x;
+        const C = x * moduleA.y - moduleA.x * y;
+        
+        const lineLength = Math.sqrt(Math.pow(moduleB.x - moduleA.x, 2) + Math.pow(moduleB.y - moduleA.y, 2));
+        const distance = Math.abs(A * moduleB.x + B * moduleB.y + C) / lineLength;
+        
+        // Verificar que el punto esté dentro del segmento (no en la extensión de la línea)
+        const dotProduct = (x - moduleA.x) * (moduleB.x - moduleA.x) + (y - moduleA.y) * (moduleB.y - moduleA.y);
+        if (dotProduct < 0 || dotProduct > lineLength * lineLength) continue;
+        
+        if (distance <= tolerance) {
+            return i; // Retornar índice de la conexión
+        }
+    }
+    
+    return null; // No hay conexión bajo el click
+}
+
 // Eventos del canvas
 let lastClickTime = 0;
 let lastClickedModule = null;
@@ -943,7 +975,13 @@ canvas.addEventListener('mousedown', (e) => {
         
         // Verificar doble clic en el mismo módulo
         if (currentTime - lastClickTime < 300 && lastClickedModule === clickedModule) {
-            transferDroid(clickedModule);
+            // Si hay conexión seleccionada, usar transferencia específica
+            if (gameState.selectedConnection !== null) {
+                transferDroidByConnection(clickedModule, gameState.selectedConnection);
+            } else {
+                // Transferencia normal por distancia de grafo
+                transferDroid(clickedModule);
+            }
             lastClickTime = 0;
             lastClickedModule = null;
         } else {
@@ -951,14 +989,26 @@ canvas.addEventListener('mousedown', (e) => {
             lastClickedModule = clickedModule;
         }
     } else {
-        // Click en área vacía - cancelar modos activos
-        if (gameState.connectionMode || gameState.destroyMode) {
-            gameState.connectionMode = false;
-            gameState.destroyMode = false;
-            canvas.style.cursor = 'default';
+        // Click en área vacía - verificar si clickeamos una conexión
+        const clickedConnectionIndex = getClickedConnection(x, y);
+        if (clickedConnectionIndex !== null) {
+            // Seleccionar/deseleccionar conexión
+            if (gameState.selectedConnection === clickedConnectionIndex) {
+                gameState.selectedConnection = null; // Deseleccionar si ya estaba seleccionada
+            } else {
+                gameState.selectedConnection = clickedConnectionIndex; // Seleccionar nueva conexión
+            }
+        } else {
+            // Click en área realmente vacía - cancelar modos activos y deseleccionar conexión
+            if (gameState.connectionMode || gameState.destroyMode) {
+                gameState.connectionMode = false;
+                gameState.destroyMode = false;
+                canvas.style.cursor = 'default';
+            }
+            gameState.selectedConnection = null; // Deseleccionar conexión
+            lastClickTime = 0;
+            lastClickedModule = null;
         }
-        lastClickTime = 0;
-        lastClickedModule = null;
     }
 });
 
@@ -1012,6 +1062,43 @@ canvas.addEventListener('wheel', (e) => {
     gameState.camera.y += worldYBefore - worldYAfter;
 });
 
+// Transferir droide usando conexión específica seleccionada
+function transferDroidByConnection(targetModule, connectionIndex) {
+    if (targetModule.type === 'energy' || targetModule.droids >= targetModule.maxDroids) return;
+    
+    const connection = gameState.connections[connectionIndex];
+    if (!connection) return;
+    
+    // Encontrar el índice del módulo objetivo
+    const targetModuleIndex = gameState.modules.indexOf(targetModule);
+    if (targetModuleIndex === -1) return;
+    
+    // Determinar cuál módulo de la conexión es el fuente
+    let sourceModuleIndex = null;
+    if (connection.from === targetModuleIndex) {
+        sourceModuleIndex = connection.to;
+    } else if (connection.to === targetModuleIndex) {
+        sourceModuleIndex = connection.from;
+    } else {
+        // El módulo objetivo no está conectado por esta conexión
+        return;
+    }
+    
+    const sourceModule = gameState.modules[sourceModuleIndex];
+    if (!sourceModule || sourceModule.type === 'energy' || sourceModule.droids === 0) {
+        // No hay droides para transferir en el módulo fuente
+        return;
+    }
+    
+    // Realizar transferencia
+    sourceModule.droids--;
+    targetModule.droids++;
+    
+    // Si el módulo objetivo es de reclutamiento, resetear su timer
+    if (targetModule.type === 'recruitment') {
+        targetModule.lastRecruitment = gameState.gameTime;
+    }
+}
 
 function transferDroid(targetModule) {
     if (targetModule.type === 'energy' || targetModule.droids >= targetModule.maxDroids) return;
@@ -1353,13 +1440,22 @@ function render() {
     drawStars();
     
     // Dibujar conexiones
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    for (let conn of gameState.connections) {
+    ctx.lineWidth = 4;
+    for (let i = 0; i < gameState.connections.length; i++) {
+        const conn = gameState.connections[i];
         const moduleA = gameState.modules[conn.from];
         const moduleB = gameState.modules[conn.to];
         
         if (moduleA && moduleB) {
+            // Colorear diferente si está seleccionada
+            if (gameState.selectedConnection === i) {
+                ctx.strokeStyle = '#ffff00'; // Amarillo para conexión seleccionada
+                ctx.lineWidth = 6; // Más gruesa cuando está seleccionada
+            } else {
+                ctx.strokeStyle = '#ffffff'; // Blanco normal
+                ctx.lineWidth = 4;
+            }
+            
             ctx.beginPath();
             ctx.moveTo(moduleA.x, moduleA.y);
             ctx.lineTo(moduleB.x, moduleB.y);
@@ -1500,6 +1596,7 @@ document.addEventListener('keydown', (e) => {
         gameState.placingModule = false;
         gameState.connectionMode = false;
         gameState.destroyMode = false;
+        gameState.selectedConnection = null; // Deseleccionar conexión
         canvas.style.cursor = 'default';
     }
     
