@@ -24,7 +24,13 @@ let gameState = {
     placingModule: false,
     connectionMode: false,
     destroyMode: false,
-    gameSpeed: 1.0 // Velocidad del juego: 0.5x, 1x, 2x
+    gameSpeed: 1.0, // Velocidad del juego: 0.5x, 1x, 2x
+    // Sistema de cámara
+    camera: {
+        x: 0,
+        y: 0,
+        speed: 300 // píxeles por segundo
+    }
 };
 
 // Tipos de módulos
@@ -887,8 +893,8 @@ let lastClickedModule = null;
 if (typeof document !== 'undefined') {
 canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = e.clientX - rect.left + gameState.camera.x; // Ajustar por cámara
+    const y = e.clientY - rect.top + gameState.camera.y;  // Ajustar por cámara
     
     // Verificar si estamos colocando un módulo
     if (gameState.placingModule && gameState.selectedModuleType) {
@@ -954,8 +960,8 @@ canvas.addEventListener('mousedown', (e) => {
 
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = e.clientX - rect.left + gameState.camera.x; // Ajustar por cámara
+    const y = e.clientY - rect.top + gameState.camera.y;  // Ajustar por cámara
     
     // Actualizar posición del mouse para preview
     mouseX = x;
@@ -1290,6 +1296,10 @@ function render() {
     // Limpiar canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
+    // Aplicar transformación de cámara
+    ctx.save();
+    ctx.translate(-gameState.camera.x, -gameState.camera.y);
+    
     // Dibujar estrellas
     drawStars();
     
@@ -1323,7 +1333,7 @@ function render() {
         projectile.draw();
     }
     
-    // Dibujar preview del módulo a colocar
+    // Dibujar preview del módulo a colocar (dentro de la transformación de cámara)
     if (gameState.placingModule && gameState.selectedModuleType) {
         ctx.globalAlpha = 0.5;
         ctx.fillStyle = moduleTypes[gameState.selectedModuleType].color;
@@ -1332,6 +1342,9 @@ function render() {
         ctx.fill();
         ctx.globalAlpha = 1.0;
     }
+    
+    // Restaurar transformación de cámara
+    ctx.restore();
     
     // Mostrar indicador de pausa
     if (gameState.gamePaused) {
@@ -1352,6 +1365,24 @@ function render() {
 let mouseX = 0;
 let mouseY = 0;
 
+// Sistema de control de cámara
+const keys = {
+    w: false,
+    a: false,
+    s: false,
+    d: false
+};
+
+// Función para actualizar la posición de la cámara
+function updateCamera(deltaTime) {
+    const speed = gameState.camera.speed * deltaTime / 1000; // Convertir a píxeles por frame
+    
+    if (keys.w) gameState.camera.y -= speed;
+    if (keys.s) gameState.camera.y += speed;
+    if (keys.a) gameState.camera.x -= speed;
+    if (keys.d) gameState.camera.x += speed;
+}
+
 // Bucle principal del juego
 let lastTime = 0;
 function gameLoop(currentTime) {
@@ -1370,6 +1401,8 @@ function gameLoop(currentTime) {
     
     gameState.gameTime += deltaTime;
     
+    // Actualizar cámara
+    updateCamera(deltaTime);
     
     // Generar oleadas
     if (gameState.gameTime >= gameState.nextWaveTime && gameState.waveNumber < 10) {
@@ -1410,7 +1443,7 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 
-// Eventos de teclado para cancelar modos y pausar
+// Eventos de teclado para cancelar modos, pausar y controlar cámara
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         gameState.selectedModuleType = null;
@@ -1423,6 +1456,21 @@ document.addEventListener('keydown', (e) => {
     if (e.key === ' ' || e.key === 'Spacebar') {
         e.preventDefault(); // Evitar scroll de página
         togglePause();
+    }
+    
+    // Control de cámara con WASD
+    const key = e.key.toLowerCase();
+    if (key === 'w' || key === 'a' || key === 's' || key === 'd') {
+        e.preventDefault(); // Evitar scroll de página
+        keys[key] = true;
+    }
+});
+
+// Evento keyup para dejar de mover la cámara
+document.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    if (key === 'w' || key === 'a' || key === 's' || key === 'd') {
+        keys[key] = false;
     }
 });
 
