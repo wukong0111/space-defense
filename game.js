@@ -575,8 +575,13 @@ class Enemy {
 					closestModule.x - this.x,
 				);
 
-				// Mezclar dirección hacia objetivo con movimiento errático
-				this.direction = this.direction * 0.7 + targetAngle * 0.3;
+				// Gradualmente girar hacia el objetivo
+				const angleDifference = targetAngle - this.direction;
+				const turnSpeed = 0.002 * deltaTime;
+
+				if (Math.abs(angleDifference) > 0.1) {
+					this.direction += Math.sign(angleDifference) * turnSpeed;
+				}
 			}
 		}
 
@@ -1780,6 +1785,7 @@ if (typeof document !== "undefined") {
 if (typeof module !== "undefined" && module.exports) {
 	module.exports = {
 		Module,
+		Enemy,
 		gameState,
 		moduleTypes,
 		initGame,

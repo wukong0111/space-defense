@@ -5,7 +5,7 @@
 const game = require('./game.js');
 
 // Usar las clases y estado reales
-const { Module, gameState, moduleTypes, initGame, updateConnections, transferDroid, placeModule } = game;
+const { Module, Enemy, gameState, moduleTypes, initGame, updateConnections, transferDroid, placeModule } = game;
 
 // Tests
 function runTests() {
@@ -503,9 +503,45 @@ function testRecruitmentCapacity() {
     }
 }
 
+function testEnemyMovement() {
+    console.log('🚀 Test: Movimiento de enemigos');
+
+    // Setup
+    gameState.modules = [new Module(400, 300, 'production', 0)];
+    const enemy = new Enemy();
+    enemy.x = 100;
+    enemy.y = 100;
+
+    const directions = [];
+    let erraticChanges = 0;
+
+    // Simulate a few seconds of movement
+    for (let i = 0; i < 100; i++) {
+        enemy.update(16); // Simulate 16ms delta time
+        directions.push(enemy.direction);
+    }
+
+    // Analyze direction changes
+    for (let i = 1; i < directions.length; i++) {
+        const diff = Math.abs(directions[i] - directions[i - 1]);
+        if (diff > Math.PI / 4) { // Check for changes greater than 45 degrees
+            erraticChanges++;
+        }
+    }
+
+    console.log(`  Cambios erráticos de dirección: ${erraticChanges}`);
+
+    if (erraticChanges < 5) {
+        console.log('✅ Test movimiento de enemigos: PASÓ\n');
+    } else {
+        console.log('❌ Test movimiento de enemigos: FALLÓ\n');
+    }
+}
+
 // Ejecutar tests
 runTests();
 testRealGameScenario();
 testDefenseModuleBug();
 testRecruitmentModuleGeneratesDroidsWithoutSpace();
 testRecruitmentCapacity();
+testEnemyMovement();
