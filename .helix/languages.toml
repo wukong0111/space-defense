@@ -1,0 +1,10 @@
+# Minimal configuration that preserves LSP functionality + path mapping
+
+[language-server.typescript-language-server]
+command = "./node_modules/.bin/typescript-language-server"
+args = ["--stdio"]
+config.hostInfo = "helix"
+
+# Enable non-relative imports for path mapping (@/* from tsconfig.json)
+[language-server.typescript-language-server.config.preferences]
+importModuleSpecifier = "non-relative"
